@@ -1,103 +1,85 @@
-const OrderBook = (() => {
-  const orderBook = {};
+// OrderBook class
+class OrderBook {
+  constructor() {
+    this.bids = new SkipList();
+    this.asks = new SkipList();
+    this.openPositions = new Map();
+    this.feePercentage = 0.1; // Example fee percentage, adjust as needed
+  }
 
-  orderBook.addOrder = (order) => {
-    if (!orderBook[order.symbol]) {
-      orderBook[order.symbol] = {
-        bids: [],
-        asks: []
-      };
-    }
-
-    const side = order.side === "buy" ? "bids" : "asks";
-    orderBook[order.symbol][side].push(order);
-
-    orderBook.sort();
-  };
-
-  orderBook.removeOrder = (order) => {
-    const side = order.side === "buy" ? "bids" : "asks";
-    const orders = orderBook[order.symbol][side];
-
-    orders.forEach((o, i) => {
-      if (o.id === order.id) {
-        orders.splice(i, 1);
-        break;
-      }
-    });
-
-    if (orders.length === 0) {
-      delete orderBook[order.symbol][side];
-    }
-
-    orderBook.sort();
-  };
-
-  orderBook.getBestBid = (symbol) => {
-    return orderBook[symbol].bids[0];
-  };
-
-  orderBook.getBestAsk = (symbol) => {
-    return orderBook[symbol].asks[0];
-  };
-
-  orderBook.getOrders = (symbol) => {
-    return orderBook[symbol];
-  };
-
-  orderBook.sort = () => {
-    Object.keys(orderBook).forEach((symbol) => {
-      orderBook[symbol].bids.sort((a, b) => a.price - b.price);
-      orderBook[symbol].asks.sort((a, b) => b.price - a.price);
-    });
-  };
-
-  orderBook.handleMarketOrder = (symbol, amount) => {
-    const bestBid = orderBook.getBestBid(symbol);
-    if (bestBid) {
-      const filledAmount = Math.min(amount, bestBid.size);
-      orderBook.removeOrder(bestBid);
-      return filledAmount;
+  // Add an order to the order book
+  addOrder(order) {
+    if (order.type === "bid") {
+      this.bids.add(order);
     } else {
-      return 0;
+      this.asks.add(order);
     }
-  };
+  }
 
-  orderBook.handleStopLossOrder = (symbol, price, amount) => {
-    const orders = orderBook.getOrders(symbol);
-    for (const order of orders) {
-      if (order.side === "sell" && order.price <= price) {
-        const filledAmount = Math.min(amount, order.size);
-        orderBook.removeOrder(order);
-        return filledAmount;
-      }
+  // Get the best bid and ask prices
+  getBestBid() {
+    return this.bids.first();
+  }
+
+  getBestAsk() {
+    return this.asks.first();
+  }
+
+  // Get the number of orders in the order book
+  getSize() {
+    return this.bids.size() + this.asks.size();
+  }
+
+  // Get the total quantity of orders in the order book
+  getQuantity() {
+    return this.bids.getTotalQuantity() + this.asks.getTotalQuantity();
+  }
+
+  // Get the average price of orders in the order book
+  getAveragePrice() {
+    return this.getQuantity() / this.getSize();
+  }
+
+  // Modify an order in the order book
+  modifyOrder(order) {
+    if (order.type === "bid") {
+      this.bids.modify(order);
+    } else {
+      this.asks.modify(order);
     }
-    return 0;
-  };
+  }
 
-  orderBook.handleStopLimitOrder = (symbol, price, stopPrice, amount) => {
-    const orders = orderBook.getOrders(symbol);
-    for (const order of orders) {
-      if (order.side === "sell" && order.price <= price && order.price >= stopPrice) {
-        const filledAmount = Math.min(amount, order.size);
-        orderBook.removeOrder(order);
-        return filledAmount;
-      }
-    }
-    return 0;
-  };
+  // Cancel an order in the order book
+  cancelOrder(orderId) {
+    this.bids.remove(orderId);
+    this.asks.remove(orderId);
+  }
 
-  orderBook.handleTakeProfitOrder = (symbol, price, amount) => {
-    const orders = orderBook.getOrders(symbol);
-    for (const order of orders) {
-      if (order.side === "buy" && order.price >= price) {
-        const filledAmount = Math.min(amount, order.size);
-        orderBook.removeOrder(order);
-        return filledAmount;
-      }
-    }
-    return 0;
-  };
+  // Get all orders in the order book
+  getOrders() {
+    return this.bids.getAll() + this.asks.getAll();
+  }
 
-  return orderBook;
-})();
+  // Add an open position
+  addOpenPosition(position) {
+    this.openPositions.set(position.id, position);
+  }
+
+  // Remove an open position
+  removeOpenPosition(positionId) {
+    this.openPositions.delete(positionId);
+  }
+
+  // Calculate liquidation price for an open position
+  calculateLiquidationPrice(positionId) {
+    // Implementation based on your liquidation calculation rules
+    // Retrieve position details from openPositions map and perform the calculation
+    // Return the liquidation price
+  }
+
+  // Calculate fee for an order
+  calculateFee(order) {
+    const feeAmount = order.quantity * order.price * this.feePercentage;
+    return feeAmount;
+  }
+}
