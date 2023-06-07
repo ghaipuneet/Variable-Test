@@ -1,58 +1,153 @@
 const { MongoClient } = require('mongodb');
 
 class TradeHistory {
-  constructor(databaseURL, dbName, collectionName) {
-    this.databaseURL = databaseURL;
-    this.dbName = dbName;
-    this.collectionName = collectionName;
-    this.collection = null; // Placeholder for the MongoDB collection
+  constructor() {
+    this.collectionName = 'trades';
+    this.client = null;
+    this.db = null;
   }
 
-  async connectToMongoDB() {
-    const client = new MongoClient(this.databaseURL);
-
+  async connect(url, dbName) {
     try {
-      await client.connect();
-      const db = client.db(this.dbName);
-      this.collection = db.collection(this.collectionName);
-      console.log('Connected to MongoDB and initialized trade history collection.');
+      const options = {
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
+        poolSize: 10, // Maximum number of connections in the pool
+      };
+      this.client = await MongoClient.connect(url, options);
+      this.db = this.client.db(dbName);
+      console.log('Connected to MongoDB');
     } catch (error) {
       console.error('Error connecting to MongoDB:', error);
-      throw error; // Re-throw the error to propagate it to the caller
+    }
+  }
+
+  async disconnect() {
+    try {
+      await this.client.close();
+      console.log('Disconnected from MongoDB');
+    } catch (error) {
+      console.error('Error disconnecting from MongoDB:', error);
     }
   }
 
   async addTrade(trade) {
     try {
-      await this.collection.insertOne(trade);
-      console.log('Trade added to trade history:', trade);
+      const collection = this.db.collection(this.collectionName);
+      await collection.insertOne(trade);
+      console.log('Trade added to TradeHistory');
     } catch (error) {
-      console.error('Error adding trade to trade history:', error);
-      throw error; // Re-throw the error to propagate it to the caller
+      console.error('Error adding trade:', error);
     }
   }
 
-  async getAllTrades() {
+  async retrieveAllTrades() {
     try {
-      const trades = await this.collection.find({}).toArray();
-      console.log('All trades:', trades);
+      const collection = this.db.collection(this.collectionName);
+      const trades = await collection.find({}).toArray();
       return trades;
     } catch (error) {
-      console.error('Error retrieving all trades:', error);
-      throw error; // Re-throw the error to propagate it to the caller
+      console.error('Error retrieving trades:', error);
+      return [];
     }
   }
 
-  async getTradesByOrderID(orderID) {
+  async retrieveTradesByOrderId(orderId) {
     try {
-      const trades = await this.collection.find({ $or: [{ buyOrderID: orderID }, { sellOrderID: orderID }] }).toArray();
-      console.log(`Trades for order ID ${orderID}:`, trades);
+      const collection = this.db.collection(this.collectionName);
+      const trades = await collection.find({ $or: [{ buyOrderId: orderId }, { sellOrderId: orderId }] }).toArray();
       return trades;
     } catch (error) {
-      console.error(`Error retrieving trades for order ID ${orderID}:`, error);
-      throw error; // Re-throw the error to propagate it to the caller
+      console.error('Error retrieving trades by order ID:', error);
+      return [];
+    }
+  }
+
+  async retrieveTradesByUserId(userId) {
+    try {
+      const collection = this.db.collection(this.collectionName);
+      const trades = await collection.find({ userId }).toArray();
+      return trades;
+    } catch (error) {
+      console.error('Error retrieving trades by user ID:', error);
+      return [];
+    }
+  }
+
+  async retrievePaginatedTrades(page, limit) {
+    try {
+      const collection = this.db.collection(this.collectionName);
+      const trades = await collection.find({}).skip((page - 1) * limit).limit(limit).toArray();
+      return trades;
+    } catch (error) {
+      console.error('Error retrieving paginated trades:', error);
+      return [];
+    }
+  }
+
+  async retrieveTradesByDateRange(startDate, endDate) {
+    try {
+      const collection = this.db.collection(this.collectionName);
+      const trades = await collection.find({ timestamp: { $gte: startDate, $lte: endDate } }).toArray();
+      return trades;
+    } catch (error) {
+      console.error('Error retrieving trades by date range:', error);
+      return [];
+    }
+  }
+
+  async archiveTradesOlderThan(date) {
+    try {
+      const collection = this.db.collection(this.collectionName);
+      await collection.deleteMany({ timestamp: { $lt: date } });
+      console.log('Trades older than', date, 'archived');
+    } catch (error) {
+      console.error('Error archiving trades:', error);
     }
   }
 }
 
-module.exports = TradeHistory;
+// Usage example
+const tradeHistory = new TradeHistory();
+const mongodbUrl = 'mongodb://localhost:27017';
+const databaseName = 'your_database_name';
+
+// Connect to MongoDB using connection pooling
+tradeHistory.connect(mongodbUrl, databaseName, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+    poolSize: 10, // Maximum number of connections in the pool
+  })
+    .then(async () => {
+      // Perform trade history operations
+      const trades = await tradeHistory.retrieveAllTrades();
+      console.log('All trades:', trades);
+  
+      const orderId = 'your_order_id';
+      const tradesByOrderId = await tradeHistory.retrieveTradesByOrderId(orderId);
+      console.log('Trades by order ID:', tradesByOrderId);
+  
+      const userId = 'your_user_id';
+      const tradesByUserId = await tradeHistory.retrieveTradesByUserId(userId);
+      console.log('Trades by user ID:', tradesByUserId);
+  
+      const page = 1;
+      const limit = 10;
+      const paginatedTrades = await tradeHistory.retrievePaginatedTrades(page, limit);
+      console.log('Paginated trades:', paginatedTrades);
+  
+      const startDate = new Date('2023-01-01');
+      const endDate = new Date('2023-01-31');
+      const tradesByDateRange = await tradeHistory.retrieveTradesByDateRange(startDate, endDate);
+      console.log('Trades by date range:', tradesByDateRange);
+  
+      const archiveDate = new Date('2022-06-01');
+      await tradeHistory.archiveTradesOlderThan(archiveDate);
+  
+      // Disconnect from MongoDB
+      tradeHistory.disconnect();
+    })
+    .catch((error) => {
+      console.error('Error connecting to MongoDB:', error);
+    });
+  
