@@ -108,3 +108,6 @@ class OrderBook {
     return feeAmount;
   }
 }
+
+// Export the OrderBook class
+module.exports = OrderBook;
