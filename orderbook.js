@@ -6,6 +6,31 @@ class OrderBook {
     this.openPositions = new Map();
     this.feePercentage = 0.1; // Example fee percentage, adjust as needed
   }
+  
+  
+  // Add a new method for updating the order book
+  updateOrderBook() {
+    // Get the best bid and ask prices
+    const bestBid = this.bids.first();
+    const bestAsk = this.asks.first();
+
+    // Check if there are any orders in the order book
+    if (!bestBid || !bestAsk) {
+      return;
+    }
+
+    // Check if the best bid price is greater than or equal to the best ask price
+    if (bestBid.price >= bestAsk.price) {
+      // Match the orders by executing trades
+      const matchedOrders = this.matchOrders(bestBid, bestAsk);
+
+      // Remove filled orders from the order book
+      matchedOrders.forEach((order) => {
+        this.bids.remove(order.id);
+        this.asks.remove(order.id);
+      });
+    }
+  }
 
   // Add an order to the order book
   addOrder(order) {
