@@ -1,119 +1,147 @@
-// Import the express library
-const express = require('express')
-
-// Import the MongoClient library
-const MongoClient = require('mongodb').MongoClient
+// Import the required libraries
+const express = require('express');
+const { MongoClient } = require('mongodb');
+const { body, validationResult } = require('express-validator');
 
 // Create an Express application
-const app = express()
+const app = express();
+
+// Middleware for parsing request body
+app.use(express.json());
+
+// Connect to the MongoDB database
+const dbClient = new MongoClient('mongodb://localhost:27017/orders', {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+});
 
 // Define a route to get the balance of a user
-app.get('/balance', (req, res) => {
-  // Connect to the MongoDB database
-  const db = MongoClient.connect('mongodb://localhost:27017/orders', (err, client) => {
-    if (err) {
-      // Throw an error if the connection fails
-      throw err
-    }
-
-    // Get the database object
-    const db = client.db('orders')
+app.get('/balance', async (req, res) => {
+  try {
+    await dbClient.connect();
+    const db = dbClient.db('orders');
 
     // Find the user in the database
-    const user = db.users.findOne({publicAddress: req.query.publicAddress})
+    const user = await db.collection('users').findOne({ publicAddress: req.query.publicAddress });
 
     // If the user is not found, send a 404 error
     if (!user) {
-      res.status(404).send('User not found')
-    } else {
-      // Send the user's balance
-      res.json({
-        balance: user.balance
-      })
+      return res.status(404).send('User not found');
     }
-  })
-})
+
+    // Send the user's balance
+    res.json({
+      balance: user.balance,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Internal Server Error');
+  }
+});
 
 // Define a route to deposit cryptocurrency into a user's account
-app.post('/deposit', (req, res) => {
-  // Connect to the MongoDB database
-  const db = MongoClient.connect('mongodb://localhost:27017/orders', (err, client) => {
-    if (err) {
-      // Throw an error if the connection fails
-      throw err
-    }
+app.post(
+  '/deposit',
+  [
+    body('publicAddress').notEmpty().withMessage('Public address is required'),
+    body('amount').isNumeric().withMessage('Amount must be a number'),
+  ],
+  async (req, res) => {
+    try {
+      await dbClient.connect();
+      const db = dbClient.db('orders');
 
-    // Get the database object
-    const db = client.db('orders')
+      // Validate request body
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
 
-    // Find the user in the database
-    const user = db.users.findOne({publicAddress: req.body.publicAddress})
+      // Find the user in the database
+      const user = await db.collection('users').findOne({ publicAddress: req.body.publicAddress });
 
-    // If the user is not found, send a 404 error
-    if (!user) {
-      res.status(404).send('User not found')
-    } else {
+      // If the user is not found, send a 404 error
+      if (!user) {
+        return res.status(404).send('User not found');
+      }
+
       // Add the amount to the user's balance
-      user.balance += req.body.amount
+      user.balance += req.body.amount;
 
       // Save the user's balance
-      db.users.save(user)
+      await db.collection('users').updateOne({ publicAddress: req.body.publicAddress }, { $set: { balance: user.balance } });
 
       // Send a success message
-      res.send('Deposit successful')
+      res.send('Deposit successful');
+    } catch (err) {
+      console.error(err);
+      res.status(500).send('Internal Server Error');
     }
-  })
-})
+  }
+);
 
 // Define a route to withdraw cryptocurrency from a user's account
-app.post('/withdrawal', (req, res) => {
-  // Connect to the MongoDB database
-  const db = MongoClient.connect('mongodb://localhost:27017/orders', (err, client) => {
-    if (err) {
-      // Throw an error if the connection fails
-      throw err
-    }
+app.post(
+  '/withdrawal',
+  [
+    body('publicAddress').notEmpty().withMessage('Public address is required'),
+    body('amount').isNumeric().withMessage('Amount must be a number'),
+  ],
+  async (req, res) => {
+    try {
+      await dbClient.connect();
+      const db = dbClient.db('orders');
 
-    // Get the database object
-    const db = client.db('orders')
+      // Validate request body
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
 
-    // Find the user in the database
-    const user = db.users.findOne({publicAddress: req.body.publicAddress})
+      // Find the user in the database
+      const user = await db.collection('users').findOne({ publicAddress: req.body.publicAddress });
 
-    // If the user is not found, send a 404 error
-    if (!user) {
-      res.status(404).send('User not found')
-    } else if (user.balance < req.body.amount) {
-      res.status(400).send('Insufficient balance')
-    } else {
+      // If the user is not found, send a 404 error
+      if (!user) {
+        return res.status(404).send('User not found');
+      } else if (user.balance < req.body.amount) {
+        return res.status(400).send('Insufficient balance');
+      }
+
       // Subtract the amount from the user's balance
-      user.balance -= req.body.amount
+      user.balance -= req.body.amount;
 
       // Save the user's balance
-      db.users.save(user)
+      await db.collection('users').updateOne({ publicAddress: req.body.publicAddress }, { $set: { balance: user.balance } });
 
       // Send a success message
-      res.send('Withdrawal successful')
+      res.send('Withdrawal successful');
+    } catch (err) {
+      console.error(err);
+      res.status(500).send('Internal Server Error');
     }
-  })
-})
+  }
+);
 
 // Define a route to get the order book
-app.get('/orderbook', (req, res) => {
-  // Connect to the MongoDB database
-  const db = MongoClient.connect('mongodb://localhost:27017/orders', (err, client) => {
-    if (err) {
-      // Throw an error if the connection fails
-      throw err
-    }
-
-    // Get the database object
-    const db = client.db('orders')
+app.get('/orderbook', async (req, res) => {
+  try {
+    await dbClient.connect();
+    const db = dbClient.db('orders');
 
     // Find all orders in the database
-    const orderBook = db.orderBooks.find()
+    const orderBook = await db.collection('orderBooks').find().toArray();
 
     // Send the order book to the client
-    res.json(orderBook)
-  })
-})
+    res.json(orderBook);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Internal Server Error');
+  }
+});
+
+// Start the server
+const port = 3000;
+app.listen(port, () => {
+  console.log(`Server is running on port ${port}`);
+});
